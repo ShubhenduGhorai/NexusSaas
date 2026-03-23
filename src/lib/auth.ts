@@ -5,11 +5,12 @@ import EmailProvider from "next-auth/providers/email";
 import { prisma } from "@/lib/prisma";
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET || "fallback_nextauth_secret",
   adapter: PrismaAdapter(prisma),
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID as string,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+      clientId: (process.env.GOOGLE_CLIENT_ID || "fallback_client_id") as string,
+      clientSecret: (process.env.GOOGLE_CLIENT_SECRET || "fallback_client_secret") as string,
     }),
     EmailProvider({
       server: {
