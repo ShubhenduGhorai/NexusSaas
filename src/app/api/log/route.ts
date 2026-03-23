@@ -19,6 +19,19 @@ export async function POST(req: NextRequest) {
 
     const cost = calculateCost(model, tokens_input, tokens_output);
 
+    // 1. Check Limits
+    const limitCheck = await import("@/lib/usage").then((m) =>
+      m.checkLimits(session.user.id)
+    );
+
+    if (!limitCheck.allowed) {
+      return NextResponse.json(
+        { error: `Usage limit exceeded: ${limitCheck.reason}` },
+        { status: 403 }
+      );
+    }
+
+    // 2. Create Log
     const log = await prisma.apiLog.create({
       data: {
         userId: session.user.id,
@@ -31,6 +44,16 @@ export async function POST(req: NextRequest) {
         status: status || "success",
       },
     });
+
+    // 3. Increment Usage
+    await import("@/lib/usage").then((m) =>
+      m.incrementUsage({
+        userId: session.user.id,
+        cost,
+        tokensInput: tokens_input,
+        tokensOutput: tokens_output,
+      })
+    );
 
     return NextResponse.json(log, { status: 201 });
   } catch (error) {

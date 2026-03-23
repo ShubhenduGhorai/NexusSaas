@@ -35,18 +35,23 @@ model Session {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  createdAt     DateTime  @default(now())
-  plan          String    @default("free")
-  accounts      Account[]
-  sessions      Session[]
-  logs          ApiLog[]
-  alerts        Alert[]
-  alertEvents   AlertEvent[]
+  id              String    @id @default(cuid())
+  name            String?
+  email           String?   @unique
+  emailVerified   DateTime?
+  image           String?
+  createdAt       DateTime  @default(now())
+  plan            String    @default("free")
+  total_requests  Int       @default(0)
+  total_tokens    Int       @default(0)
+  total_cost      Float     @default(0)
+  accounts        Account[]
+  sessions        Session[]
+  logs            ApiLog[]
+  alerts          Alert[]
+  alertEvents     AlertEvent[]
+  subscription    Subscription?
+  payments        Payment[]
 }
 
 model ApiLog {
@@ -98,4 +103,26 @@ model AlertEvent {
 
   @@index([userId, createdAt])
   @@index([alertId, createdAt])
+}
+
+model Subscription {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  plan_id         String
+  status          String
+  currentPeriodEnd DateTime?
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  userId        String
+  amount        Float
+  status        String
+  dodoPaymentId String?  @unique
+  createdAt     DateTime @default(now())
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

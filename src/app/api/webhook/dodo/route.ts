@@ -38,10 +38,36 @@ export async function POST(req: NextRequest) {
 
     if (eventType === "payment.succeeded" || eventType === "payment.success") {
       const paymentData = event.data;
-      // Extract userId from Dodo's metadata we passed when creating the checkout session
-      const userId = paymentData?.metadata?.userId;
+      const userId = paymentData?.metadata?.userId || paymentData?.customer?.reference;
 
       if (userId) {
+        // Create Payment Record
+        await prisma.payment.create({
+          data: {
+            userId,
+            amount: typeof paymentData.amount === "number" ? paymentData.amount : parseFloat(paymentData.amount) || 0,
+            status: "success",
+            dodoPaymentId: paymentData.payment_id || paymentData.id || String(Date.now()),
+          },
+        });
+
+        // Update Subscription
+        await prisma.subscription.upsert({
+          where: { userId },
+          update: {
+            plan_id: "pro",
+            status: "active",
+            currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // ~30 days
+          },
+          create: {
+            userId,
+            plan_id: "pro",
+            status: "active",
+            currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          },
+        });
+
+        // Update User Plan
         await prisma.user.update({
           where: { id: userId },
           data: { plan: "pro" },
@@ -49,6 +75,25 @@ export async function POST(req: NextRequest) {
         console.log(`Successfully upgraded user ${userId} to pro plan.`);
       } else {
         console.warn("Webhook recieved payment success but missing userId in metadata.");
+      }
+    } else if (eventType === "subscription.expired" || eventType === "subscription.canceled") {
+      const subData = event.data;
+      const userId = subData?.metadata?.userId || subData?.customer?.reference;
+      
+      if (userId) {
+        await prisma.subscription.update({
+          where: { userId },
+          data: {
+            status: "expired",
+            plan_id: "free",
+          },
+        });
+
+        await prisma.user.update({
+          where: { id: userId },
+          data: { plan: "free" },
+        });
+        console.log(`Successfully downgraded user ${userId} to free plan.`);
       }
     }
 
