@@ -6,9 +6,12 @@ export async function middleware(request: NextRequest) {
     request,
   })
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "http://localhost:54321"
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "public-anon-key"
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseKey,
     {
       cookies: {
         getAll() {
@@ -28,7 +31,14 @@ export async function middleware(request: NextRequest) {
   )
 
   // Refresh user session securely
-  await supabase.auth.getUser()
+  // Wrapped in try/catch to prevent 500 crashes if Supabase is unconfigured or fetch fails 
+  try {
+    if (supabaseUrl !== "http://localhost:54321") {
+      await supabase.auth.getUser()
+    }
+  } catch (err) {
+    console.error("Middleware Supabase Error:", err)
+  }
 
   return supabaseResponse
 }
