@@ -1,46 +1,46 @@
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { NextAuthOptions, getServerSession } from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
-import EmailProvider from "next-auth/providers/email";
-import { prisma } from "@/lib/prisma";
+import { createClient } from "./supabase-server";
+import { prisma } from "./prisma";
 
-export const authOptions: NextAuthOptions = {
-  secret: process.env.NEXTAUTH_SECRET || "fallback_nextauth_secret",
-  adapter: PrismaAdapter(prisma),
-  providers: [
-    GoogleProvider({
-      clientId: (process.env.GOOGLE_CLIENT_ID || "fallback_client_id") as string,
-      clientSecret: (process.env.GOOGLE_CLIENT_SECRET || "fallback_client_secret") as string,
-    }),
-    EmailProvider({
-      server: {
-        host: process.env.EMAIL_SERVER_HOST,
-        port: Number(process.env.EMAIL_SERVER_PORT),
-        auth: {
-          user: process.env.EMAIL_SERVER_USER,
-          pass: process.env.EMAIL_SERVER_PASSWORD,
+export async function getAuthSession() {
+  const supabase = createClient();
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    return null;
+  }
+
+  if (user.email) {
+    // Sync user to Prisma database so external relations (ApiLog, Subscription, etc) work
+    let dbUser = await prisma.user.findUnique({
+      where: { email: user.email },
+    });
+
+    if (!dbUser) {
+      dbUser = await prisma.user.create({
+        data: {
+          id: user.id, // Keep IDs in sync
+          email: user.email,
+          name: user.user_metadata?.full_name || user.email.split("@")[0],
         },
-      },
-      from: process.env.EMAIL_FROM,
-    }),
-  ],
-  session: {
-    strategy: "jwt",
-  },
-  callbacks: {
-    async session({ session, token }) {
-      if (token && session.user) {
-        session.user.id = token.sub as string;
-      }
-      return session;
-    },
-    async jwt({ token, user }) {
-      if (user) {
-        token.sub = user.id;
-      }
-      return token;
-    },
-  },
-};
+      });
+    }
 
-export const getAuthSession = () => getServerSession(authOptions);
+    // Return the expected NextAuth-like session object
+    return {
+      user: {
+        id: dbUser.id,
+        name: dbUser.name,
+        email: dbUser.email,
+        image: dbUser.image,
+      },
+    };
+  }
+
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.user_metadata?.full_name || null,
+    },
+  };
+}
